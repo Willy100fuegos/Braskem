@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BRASKEM SCORECARD: Operación Estratégica & Riesgo Operativo</title>
+    <!-- Carga de Tailwind CSS para el estilo moderno -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Carga de Chart.js para gráficos dinámicos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <!-- Carga de Font Awesome para íconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* Configuración de Tailwind para el tema oscuro y fuentes */
+        :root {
+            --color-primary: #1E3A8A; /* Azul Oscuro de Fondo */
+            --color-accent: #3b82f6; /* Azul Eléctrico para Acentos/Fortalezas */
+            --color-critical: #EF4444; /* Rojo para Alertas Críticas */
+            --color-warning: #F59E0B; /* Naranja para Alertas */
+        }
+        .bg-dark-blue { background-color: #0F172A; }
+        .text-accent { color: var(--color-accent); }
+        .border-accent { border-color: var(--color-accent); }
+        .shadow-glow { box-shadow: 0 0 15px rgba(59, 130, 246, 0.5); }
+        body { font-family: 'Inter', sans-serif; }
+
+        /* Estilo para invertir el logo a blanco */
+        .filter-white-logo {
+            filter: invert(1) grayscale(100%); /* Invertir y forzar gris para el blanco */
+        }
+
+        /* Estilo para el velocímetro (Gauge) */
+        .gauge-meter {
+            width: 150px;
+            height: 75px;
+            position: relative;
+            overflow: hidden;
+            background: none;
+        }
+        .gauge-arc {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            border: 15px solid #2D3748;
+            border-bottom-color: transparent;
+            border-left-color: transparent;
+            transform: translate(-50%, -50%) rotate(135deg);
+        }
+        .gauge-pointer {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            width: 2px;
+            height: 75px;
+            background-color: var(--color-accent);
+            transform-origin: bottom;
+            transition: transform 1s ease-in-out;
+            z-index: 10;
+        }
+
+        /* Estilo para el contenedor del Gráfico de Radar */
+        #radarChartContainer {
+            height: 380px; /* Altura fija para evitar el scroll y mantener el aspecto */
+            padding-bottom: 20px;
+        }
+
+        /* Media query para móviles: ajustar el logo en pantallas pequeñas */
+        @media (max-width: 640px) {
+            .logo-container {
+                justify-content: center;
+            }
+            .logo-container img {
+                margin-right: 0;
+                margin-bottom: 0.75rem;
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-dark-blue text-gray-100 min-h-screen p-4 sm:p-8">
+
+    <!-- HEADER / MAIN KPI -->
+    <header class="text-center mb-10 border-b border-gray-700 pb-4">
+        <div class="flex flex-col sm:flex-row justify-center items-center logo-container">
+            <!-- LOGO AÑADIDO CON FILTRO CSS PARA HACERLO BLANCO -->
+            <img src="https://goratrack.tecuidamos.mx/img/logo.png" alt="Logotipo de la Empresa" 
+                 class="h-10 sm:h-12 mr-0 sm:mr-4 mb-3 sm:mb-0 filter-white-logo">
+            <div>
+                <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tighter text-white">BRASKEM SCORECARD <span class="text-accent">| BI Estratégico</span></h1>
+                <p class="text-gray-400 mt-2">Evaluación de Servicios y Riesgo Operativo - Braskem Idesa</p>
+            </div>
+        </div>
+    </header>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-10">
+
+        <!-- KPI 1: SCORE GENERAL (2/5 en desktop, 1/2 en tablet, 1/1 en mobile) -->
+        <div class="md:col-span-2 lg:col-span-2 bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700 hover:shadow-glow transition-all">
+            <h2 class="text-xl font-bold mb-4 text-accent"><i class="fas fa-tachometer-alt mr-2"></i> KPI General BI</h2>
+            <div class="flex items-center justify-center">
+                <div class="gauge-meter">
+                    <div class="gauge-arc"></div>
+                    <!-- Aguja (Rayón azul) -->
+                    <div id="gaugePointer" class="gauge-pointer" style="transform: rotate(135deg) translate(-50%, 0%);"></div>
+                    <!-- Texto con Z-index alto -->
+                    <div class="absolute inset-0 flex items-center justify-center pt-10 z-20"> 
+                        <span id="generalScoreText" class="text-4xl font-extrabold text-white">81.34%</span>
+                    </div>
+                </div>
+            </div>
+            <p class="text-center text-gray-400 mt-4">Puntuación Global del Servicio (Meta: 90%)</p>
+        </div>
+
+        <!-- KPI 2: ALERTA CRÍTICA (1/5 en desktop, 1/2 en tablet, 1/1 en mobile) -->
+        <div class="md:col-span-1 lg:col-span-1 bg-red-800/20 p-6 rounded-xl shadow-lg border-2 border-red-500/50">
+            <h2 class="text-xl font-bold mb-4 text-red-500"><i class="fas fa-exclamation-triangle mr-2"></i> RIESGO CRÍTICO</h2>
+            <p class="text-5xl font-extrabold text-red-400">52.83%</p>
+            <p class="text-gray-300 mt-2">Condiciones y Dotación de EPP.</p>
+            <div class="mt-4 p-2 bg-red-900/40 rounded text-sm text-red-300">
+                👉 0% de cumplimiento en Body Cams y Activos Tácticos.
+            </div>
+        </div>
+
+        <!-- KPI 3: LIDERAZGO OPERATIVO (2/5 en desktop, 1/2 en tablet, 1/1 en mobile) -->
+        <div class="md:col-span-2 lg:col-span-2 bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700">
+            <h2 class="text-xl font-bold mb-4 text-green-400"><i class="fas fa-rocket mr-2"></i> LIDERAZGO OPERATIVO</h2>
+            <p class="text-5xl font-extrabold text-green-300">93.60%</p>
+            <p class="text-gray-300 mt-2">Máximo Score: Acciones Clave.</p>
+            <div class="mt-4 p-2 bg-gray-900/40 rounded text-sm text-gray-300">
+                ✅ **Fortaleza:** Alto nivel de cumplimiento en procedimientos críticos y liderazgo de supervisores.
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT: CHARTS AND STRATEGY -->
+    <!-- Se ajustó la grid para que en móvil sea 1 columna, en tablet 2 y en desktop 3 -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+        <!-- COLUMN 1 & 2 (Radar + Drill Down) - Ocupa 2/3 en desktop, y 1/1 en mobile/tablet -->
+        <div class="md:col-span-2 lg:col-span-2 space-y-6">
+            <div class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700">
+                <h2 class="text-xl font-bold mb-4 text-white"><i class="fas fa-chart-area mr-2 text-accent"></i> 1. Madurez Operativa por Categoría (Gráfico de Radar)</h2>
+                <div id="radarChartContainer">
+                    <canvas id="kpiChart"></canvas>
+                </div>
+                <p class="text-sm text-gray-400 mt-4">La forma irregular del polígono resalta la disparidad en el cumplimiento de los 6 ejes estratégicos.</p>
+            </div>
+
+            <!-- DRILL-DOWN SECTION (AHORA SIEMPRE VISIBLE Y ADAPTADO A MÓVIL) -->
+            <div id="drillDownContainer" class="bg-gray-900 p-6 rounded-xl shadow-2xl border-2 border-red-500/50 transition-all duration-500">
+                <h3 class="text-2xl font-extrabold mb-4 text-red-400 flex items-center"><i class="fas fa-bug mr-3"></i> ⚠️ DETALLE OPERATIVO: EPP y Activos Tácticos</h3>
+                <div class="space-y-3">
+                    <div id="drillDownList"></div>
+                </div>
+                <p class="text-sm text-red-500 mt-4 font-semibold">📢 **IMPACTO:** La baja puntuación se concentra en la falta de dotación (Body Cams/Taser) y el mal estado de accesorios (Cascos).</p>
+            </div>
+        </div>
+
+        <!-- COLUMN 3 (FODA & ACCIONES) - Ocupa 1/3 en desktop, y 1/2 en tablet (o 1/1 en mobile) -->
+        <div class="lg:col-span-1 md:col-span-2 space-y-6">
+            <!-- FODA Strategic Summary -->
+            <div class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700">
+                <h2 class="text-xl font-bold mb-4 text-white"><i class="fas fa-crosshairs mr-2 text-accent"></i> 2. Síntesis FODA</h2>
+                <div class="space-y-4">
+                    <div class="p-3 bg-green-900/30 rounded">
+                        <p class="font-bold text-green-400">✓ FORTALEZAS (S)</p>
+                        <ul class="list-disc list-inside text-sm text-gray-300 ml-2">
+                            <li>Supervisión con amplio conocimiento operativo.</li>
+                            <li>Flota vehicular completa y funcional.</li>
+                        </ul>
+                    </div>
+                    <div class="p-3 bg-red-900/30 rounded">
+                        <p class="font-bold text-red-400">❌ DEBILIDADES (W)</p>
+                        <ul class="list-disc list-inside text-sm text-gray-300 ml-2">
+                            <li>Gestión del EPP carente de estructura.</li>
+                            <li>Falta de planeación para anticipar vacantes.</li>
+                        </ul>
+                    </div>
+                    <div class="p-3 bg-blue-900/30 rounded">
+                        <p class="font-bold text-accent">💡 OPORTUNIDADES (O)</p>
+                        <ul class="list-disc list-inside text-sm text-gray-300 ml-2">
+                            <li>Establecer un sistema integral de **Gestión de EPP y Herramientas** (Digitalizar Inventario).</li>
+                            <li>Implementar **Programa de Monitoreo Continuo (GPS/CCTV/Body Cam)** para reportes en tiempo real.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PROPOSED ACTIONS / NEXT STEPS -->
+            <div class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700">
+                <h2 class="text-xl font-bold mb-4 text-white"><i class="fas fa-gavel mr-2 text-accent"></i> 3. Próximos Pasos (Propuestas)</h2>
+                <ul class="list-decimal list-inside text-sm text-gray-300 space-y-2">
+                    <li class="font-bold">Implementar método de supervisión con **Checklist (Digital)**.</li>
+                    <li>Desarrollar programa permanente de capacitación (enfoque en EPP).</li>
+                    <li class="font-bold text-accent">Establecer sistema integral de **Gestión/Control de EPP** (Digitalizar Inventario).</li>
+                    <li class="font-bold text-accent">Implementar **Monitoreo Continuo** de unidades (Aprovechar plataforma GPS).</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // --- 1. DATA MODEL ---
+        const GENERAL_SCORE = 81.34;
+        const KPI_DATA = {
+            labels: ['ACCIONES CLAVE', 'F. EMERGENCIA', 'ÁREA TRABAJO', 'INSP. UNIDADES', 'USO EPP', 'CONDICIONES EPP'],
+            scores: [93.60, 87.88, 87.00, 85.89, 81.83, 52.83]
+        };
+
+        // Datos de Drill-Down simplificados (tarjetas)
+        const EPP_DRILLDOWN_DATA = [
+            { criterion: "Body Cams / Taser / Bastón (Activos Tácticos)", score: 0.00, finding: "CRÍTICO: 0% de disponibilidad/uso reportado.", icon: 'fas fa-camera' },
+            { criterion: "Casco de Seguridad (Condición)", score: 53.00, finding: "Desgaste y falta de componentes de soporte (tafilete).", icon: 'fas fa-hard-hat' },
+            { criterion: "Uso de Casco con Barbiquejo", score: 82.00, finding: "Fallos puntuales en el uso durante la inspección.", icon: 'fas fa-user-shield' },
+            { criterion: "Calzado / Uniforme (Condición)", score: 95.00, finding: "Alto nivel de cumplimiento y conservación.", icon: 'fas fa-tshirt' },
+        ];
+
+
+        // --- 2. GAUGE CHART LOGIC (Velocímetro) ---
+        function updateGauge(score) {
+            const gaugeEl = document.getElementById('gaugePointer');
+            const scoreTextEl = document.getElementById('generalScoreText');
+            
+            // Mapea el score (0-100) a un ángulo de rotación (135deg a 315deg)
+            const minAngle = 135;
+            const maxAngle = 315;
+            const angleRange = maxAngle - minAngle;
+            
+            const angle = minAngle + (score / 100) * angleRange;
+            
+            gaugeEl.style.transform = `rotate(${angle}deg) translate(-50%, 0%)`;
+            scoreTextEl.textContent = `${score.toFixed(2)}%`;
+
+            // Colorear el texto según el nivel de riesgo
+            let color = 'text-white';
+            if (score < 70) {
+                color = 'text-red-400';
+            } else if (score < 85) {
+                color = 'text-yellow-400';
+            } else {
+                color = 'text-green-400';
+            }
+            scoreTextEl.className = `text-4xl font-extrabold ${color}`;
+        }
+
+
+        // --- 3. RADAR CHART LOGIC (Ranking de Madurez Operativa) ---
+        function initializeKpiChart() {
+            const ctx = document.getElementById('kpiChart').getContext('2d');
+            
+            const getFillColor = (score) => {
+                if (score <= 60) return 'rgba(239, 68, 68, 0.4)'; // Crítico (Rojo)
+                if (score <= 85) return 'rgba(245, 158, 11, 0.4)'; // Advertencia (Naranja)
+                return 'rgba(59, 130, 246, 0.4)'; // Éxito (Azul Eléctrico)
+            };
+
+            const getBorderColor = (score) => {
+                if (score <= 60) return '#EF4444'; 
+                if (score <= 85) return '#F59E0B'; 
+                return '#3b82f6'; 
+            };
+            
+            // Usamos el color de la puntuación más baja para el área (énfasis en el riesgo)
+            const areaFillColor = getFillColor(Math.min(...KPI_DATA.scores));
+            const areaBorderColor = getBorderColor(Math.min(...KPI_DATA.scores));
+
+            const chart = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: KPI_DATA.labels,
+                    datasets: [{
+                        label: 'Nivel de Cumplimiento (%)',
+                        data: KPI_DATA.scores,
+                        backgroundColor: areaFillColor,
+                        borderColor: areaBorderColor,
+                        pointBackgroundColor: areaBorderColor,
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: areaBorderColor,
+                        borderWidth: 2,
+                        tension: 0.2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            angleLines: { color: 'rgba(255, 255, 255, 0.2)' },
+                            grid: { color: 'rgba(255, 255, 255, 0.2)' },
+                            pointLabels: { color: '#CBD5E1', font: { size: 12 } },
+                            min: 0,
+                            max: 100,
+                            ticks: { display: false }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.dataset.label}: ${context.formattedValue}%`;
+                                }
+                            }
+                        }
+                    },
+                    onClick: (e, elements) => {
+                        // Mantenemos la función vacía, el detalle es visible por defecto.
+                    }
+                }
+            });
+        }
+
+
+        // --- 4. DRILL-DOWN LOGIC (Para llenado inicial, ya no para mostrar/ocultar) ---
+        function showDrillDown() {
+            const listEl = document.getElementById('drillDownList');
+            
+            // Llenar la lista con tarjetas de insights (permanentemente visible)
+            listEl.innerHTML = EPP_DRILLDOWN_DATA.map(item => {
+                const isCritical = item.score <= 10;
+                const scoreColor = isCritical ? 'text-red-400' : (item.score <= 70 ? 'text-yellow-400' : 'text-green-400');
+                const bgColor = isCritical ? 'bg-red-900/30 border-red-500/50' : 'bg-gray-800 border-gray-700';
+
+                return `
+                    <div class="p-4 rounded-lg border ${bgColor} flex items-start space-x-4">
+                        <i class="${item.icon} fa-2x mt-1 ${scoreColor}"></i>
+                        <div class="flex-grow">
+                            <div class="flex justify-between items-center">
+                                <span class="font-bold text-lg text-white">${item.criterion}</span>
+                                <span class="text-2xl font-extrabold ${scoreColor}">${item.score.toFixed(2)}%</span>
+                            </div>
+                            <p class="text-sm text-gray-400">${item.finding}</p>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+
+        // --- 5. INITIALIZATION ---
+        window.onload = function() {
+            // 1. Inicializar Velocímetro
+            updateGauge(GENERAL_SCORE);
+
+            // 2. Inicializar Gráfico de Radar
+            initializeKpiChart();
+
+            // 3. Mostrar el Detalle Crítico (PERMANENTE)
+            showDrillDown();
+        };
+
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Executive Intelligence Dashboard | Goratrack</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* --- CORE STYLES --- */
+        body, html { height: 100%; margin: 0; padding: 0; overflow: hidden; font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        
+        /* LAYOUT STRUCTURE */
+        .app-container { display: flex; height: 100vh; width: 100vw; position: relative; }
+        
+        /* SIDEBAR (RESPONSIVE FIX) */
+        .sidebar { 
+            width: 300px; 
+            background-color: #0f172a; 
+            color: #cbd5e1; 
+            display: flex; 
+            flex-direction: column; 
+            z-index: 3000; 
+            box-shadow: 4px 0 15px rgba(0,0,0,0.3); 
+            flex-shrink: 0;
+            /* Mobile State: Fixed & Hidden */
+            position: absolute;
+            top: 0; bottom: 0; left: 0;
+            height: 100dvh; /* FIX: Dynamic Height for Mobile Browsers */
+            transform: translateX(-100%);
+            transition: transform 0.3s ease-in-out;
+        }
+        
+        /* Desktop State */
+        @media (min-width: 768px) {
+            .sidebar { position: relative; transform: translateX(0); height: 100%; }
+            .mobile-overlay { display: none !important; }
+        }
+
+        .sidebar.open { transform: translateX(0); }
+        
+        /* Mobile Overlay */
+        .mobile-overlay {
+            position: absolute; inset: 0; background: rgba(0,0,0,0.5); z-index: 2500; 
+            opacity: 0; pointer-events: none; transition: opacity 0.3s;
+        }
+        .mobile-overlay.show { opacity: 1; pointer-events: auto; }
+
+        /* MAP CONTAINER */
+        .map-wrapper { position: relative; height: 100%; width: 100%; flex: 1; z-index: 1; }
+        #map { position: absolute; top: 0; bottom: 0; left: 0; right: 0; height: 100%; width: 100%; background: #e2e8f0; z-index: 0; }
+        
+        /* CUSTOM ICONS */
+        .custom-div-icon { background: transparent; border: none; }
+        .icon-marker-bg {
+            width: 32px; height: 32px;
+            border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            border: 2px solid white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.4);
+            transition: transform 0.2s ease-in-out;
+            cursor: pointer;
+        }
+        .icon-marker-bg:hover { transform: scale(1.2); z-index: 1000; }
+
+        /* SCROLLBARS & MOBILE SCROLL FIX */
+        .custom-scrollbar { 
+            overflow-y: auto; 
+            -webkit-overflow-scrolling: touch; 
+            overscroll-behavior: contain; /* Prevents body scroll chaining */
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+
+        /* UI ELEMENTS */
+        .section-header { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px; border-bottom: 1px solid #1e293b; padding-bottom: 6px; display: flex; align-items: center; }
+        
+        /* Route Image Styling */
+        .route-image-container {
+            width: 100%;
+            height: 180px;
+            background-color: #f1f5f9;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 12px;
+            border: 1px solid #e2e8f0;
+            position: relative;
+        }
+        .route-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            cursor: pointer;
+            transition: transform 0.3s;
+        }
+        .route-image:hover { transform: scale(1.03); }
+
+        /* Panel Animation */
+        #info-panel { transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1); }
+        
+        /* Nav Button Style */
+        .nav-btn {
+            display: inline-block;
+            background-color: #3b82f6;
+            color: white !important;
+            padding: 8px 12px;
+            border-radius: 6px;
+            text-decoration: none !important;
+            font-size: 11px;
+            font-weight: 600;
+            margin-top: 12px;
+            text-align: center;
+            width: 100%;
+            transition: background-color 0.2s;
+            box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+        }
+        .nav-btn:hover { background-color: #2563eb; }
+        
+        /* Select Input Style */
+        select {
+            background-image: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        
+        <button onclick="toggleSidebar()" class="absolute top-4 left-4 z-[2000] md:hidden bg-slate-900 text-white p-3 rounded-full shadow-lg active:scale-95 transition border border-slate-700">
+            <i class="fas fa-bars text-lg"></i>
+        </button>
+
+        <div id="mobile-overlay" class="mobile-overlay" onclick="toggleSidebar()"></div>
+
+        <aside id="sidebar" class="sidebar">
+            
+            <div class="p-5 border-b border-slate-800 bg-slate-900 flex flex-col items-center shrink-0 relative">
+                <button onclick="toggleSidebar()" class="md:hidden absolute top-4 right-4 text-slate-400 hover:text-white">
+                    <i class="fas fa-times"></i>
+                </button>
+
+                <div class="bg-white w-full p-2 rounded-lg shadow-lg flex justify-center mb-3 mt-2 md:mt-0">
+                    <img src="https://goratrack.tecuidamos.mx/img/logo.png" alt="Goratrack Logo" class="max-h-8 w-auto object-contain">
+                </div>
+                
+                <div class="text-center">
+                    <p class="text-[9px] font-bold tracking-[0.2em] text-blue-500 uppercase">PROJECT: BRASKEM ROUTES</p>
+                </div>
+                
+                <div class="mt-3 flex items-center space-x-2 bg-slate-800/50 py-1 px-3 rounded-full border border-slate-700/50">
+                    <span class="relative flex h-2 w-2">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <span class="text-[9px] font-mono text-emerald-400 uppercase tracking-tight">LIVE MONITORING</span>
+                </div>
+            </div>
+
+            <div class="flex-1 p-4 space-y-6 custom-scrollbar pb-20">
+                
+                <div>
+                    <h3 class="section-header">
+                        <i class="fas fa-route mr-2 text-blue-500"></i> Main Transfer (Airport ↔ Plant)
+                    </h3>
+                    <div class="relative">
+                        <select id="main-route-selector" class="w-full bg-slate-900 text-xs text-slate-300 border border-slate-700 rounded-md p-3 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none cursor-pointer">
+                            <option value="" selected>Select Route...</option>
+                            <option value="r_malecon">Route A: Malecón (Coastal)</option>
+                            <option value="r_lasmatas">Route B: Las Matas (Free)</option>
+                            <option value="r_coatza2">Route C: Coatza II (Toll)</option>
+                        </select>
+                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
+                            <i class="fas fa-chevron-down text-xs"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="section-header">
+                        <i class="fas fa-hotel mr-2 text-amber-500"></i> Hotel Logistics
+                    </h3>
+                    <div class="relative">
+                        <select id="hotel-selector" class="w-full bg-slate-900 text-xs text-slate-300 border border-slate-700 rounded-md p-3 focus:ring-1 focus:ring-amber-500 focus:border-amber-500 outline-none appearance-none cursor-pointer">
+                            <option value="" selected>Select Hotel...</option>
+                            <option value="holidayinn">Holiday Inn (West)</option>
+                            <option value="terranova">Hotel Terranova (Center)</option>
+                        </select>
+                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
+                            <i class="fas fa-chevron-down text-xs"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="section-header">
+                        <i class="fas fa-utensils mr-2 text-emerald-500"></i> Food & Restaurants
+                    </h3>
+                    <div class="relative">
+                        <select id="restaurant-selector" class="w-full bg-slate-900 text-xs text-slate-300 border border-slate-700 rounded-md p-3 focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 outline-none appearance-none cursor-pointer">
+                            <option value="" selected>Select Venue...</option>
+                            <option value="italiannis">Italianni's (Forum Mall)</option>
+                            <option value="trocadero">El Trocadero (Steakhouse)</option>
+                            <option value="rancho">Rancho Viejo (Traditional)</option>
+                            <option value="madison">Madison Grill (Premium)</option>
+                            <option value="pampas">Mr. Pampas (Brazilian)</option>
+                        </select>
+                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
+                            <i class="fas fa-chevron-down text-xs"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="section-header">
+                        <i class="fas fa-layer-group mr-2 text-indigo-500"></i> Asset Layers
+                    </h3>
+                    <div class="space-y-3">
+                        <label class="flex items-center space-x-3 cursor-pointer group">
+                            <input type="checkbox" id="layer-assets" checked class="form-checkbox h-4 w-4 text-yellow-500 rounded bg-slate-800 border-slate-600 focus:ring-0">
+                            <span class="text-xs text-slate-400">VIP Assets & Hotels</span>
+                        </label>
+                        <label class="flex items-center space-x-3 cursor-pointer group">
+                            <input type="checkbox" id="layer-security" checked class="form-checkbox h-4 w-4 text-blue-600 rounded bg-slate-800 border-slate-600 focus:ring-0">
+                            <span class="text-xs text-slate-400">Law Enforcement</span>
+                        </label>
+                        <label class="flex items-center space-x-3 cursor-pointer group">
+                            <input type="checkbox" id="layer-health" checked class="form-checkbox h-4 w-4 text-red-500 rounded bg-slate-800 border-slate-600 focus:ring-0">
+                            <span class="text-xs text-slate-400">Medical Support</span>
+                        </label>
+                         <label class="flex items-center space-x-3 cursor-pointer group">
+                            <input type="checkbox" id="layer-food" checked class="form-checkbox h-4 w-4 text-emerald-500 rounded bg-slate-800 border-slate-600 focus:ring-0">
+                            <span class="text-xs text-slate-400">Dining Locations</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="h-24 md:h-8"></div>
+
+            </div>
+
+            <div class="bg-slate-900 border-t border-slate-800 shrink-0 z-20 pb-safe absolute bottom-0 w-full md:relative">
+                
+                <a href="https://wa.me/529212520294" target="_blank" class="flex items-center justify-center gap-2 py-3 bg-emerald-600 hover:bg-emerald-500 text-white transition mx-4 mt-4 rounded-lg shadow-lg group no-underline">
+                    <i class="fab fa-whatsapp text-xl group-hover:scale-110 transition-transform"></i>
+                    <span class="text-xs font-bold tracking-wider">24/7 SUPPORT</span>
+                </a>
+
+                <div class="p-4 text-[9px] text-center text-slate-500 uppercase tracking-wider font-semibold">
+                    © 2025 Goratrack Intelligence
+                </div>
+            </div>
+        </aside>
+
+        <div class="map-wrapper">
+            <div id="map"></div>
+
+            <div id="info-panel" class="absolute z-[2000] bg-white/95 backdrop-blur-xl shadow-2xl border border-slate-200 flex flex-col
+                /* Mobile: Bottom Sheet */
+                w-full bottom-0 left-0 rounded-t-2xl transform translate-y-full max-h-[75vh]
+                /* Desktop: Side Panel */
+                md:w-[400px] md:top-6 md:right-6 md:bottom-auto md:left-auto md:rounded-xl md:translate-y-0 md:translate-x-[120%] md:max-h-[85vh]
+            ">
+                
+                <div class="bg-slate-900 text-white p-3 flex justify-between items-center shrink-0 relative overflow-hidden rounded-t-xl">
+                    <div class="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
+                    <h2 class="font-bold flex items-center gap-2 text-sm tracking-wide z-10">
+                        <i class="fas fa-file-shield text-blue-400"></i> <span id="panel-title">ROUTE ANALYSIS</span>
+                    </h2>
+                    <button onclick="closePanel()" class="text-slate-400 hover:text-white transition bg-white/10 hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center text-xs z-10">
+                        <i class="fas fa-chevron-down md:hidden"></i>
+                        <i class="fas fa-times hidden md:block"></i>
+                    </button>
+                </div>
+                
+                <div class="flex-1 overflow-y-auto p-5 custom-scrollbar bg-slate-50">
+                     <div id="panel-content" class="text-sm text-slate-700 space-y-5 leading-relaxed pb-12 md:pb-0">
+                        </div>
+                </div>
+               
+                <div class="bg-white p-2 border-t border-slate-200 text-center shrink-0">
+                    <p class="text-[9px] font-bold text-red-600 uppercase flex items-center justify-center tracking-widest">
+                        <i class="fas fa-lock mr-2"></i> Confidential
+                    </p>
+                </div>
+            </div>
+            
+            <div class="absolute bottom-4 right-4 md:bottom-8 md:right-8 bg-white/90 backdrop-blur-md p-3 rounded-lg shadow-xl text-xs z-[999] border border-slate-200 text-slate-800 hidden md:block max-w-[180px]">
+                <h4 class="font-bold mb-2 text-slate-900 uppercase tracking-widest text-[9px] border-b border-slate-200 pb-1">Tactical Symbology</h4>
+                <div class="space-y-1.5 text-[10px]">
+                    <div class="flex items-center"><span class="w-2 h-2 rounded-full bg-blue-500 mr-2 shadow-sm"></span> Route A (Malecón)</div>
+                    <div class="flex items-center"><span class="w-2 h-2 rounded-full bg-orange-500 mr-2 shadow-sm"></span> Route B (Las Matas)</div>
+                    <div class="flex items-center"><span class="w-2 h-2 rounded-full bg-purple-600 mr-2 shadow-sm"></span> Route C (Coatza II)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        // 1. MAP SETUP & GLOBALS
+        const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([18.11, -94.48], 12);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+        
+        // Fixed Coordinates for calculation
+        const AIRPORT_COORDS = [18.102385, -94.577286];
+        const BRASKEM_COORDS = [18.067553, -94.373880];
+
+        setTimeout(() => { map.invalidateSize(); }, 500);
+
+        // 2. UI CONTROLS
+        const sidebar = document.getElementById('sidebar');
+        const mobileOverlay = document.getElementById('mobile-overlay');
+        const infoPanel = document.getElementById('info-panel');
+
+        function toggleSidebar() {
+            sidebar.classList.toggle('open');
+            mobileOverlay.classList.toggle('show');
+        }
+
+        // Force Close Sidebar (for mobile interactions)
+        function closeSidebarMobile() {
+            if(window.innerWidth < 768 && sidebar.classList.contains('open')) {
+                toggleSidebar();
+            }
+        }
+
+        function closePanel() {
+            if(window.innerWidth < 768) { infoPanel.classList.add('translate-y-full'); } 
+            else { infoPanel.classList.add('md:translate-x-[120%]'); }
+        }
+
+        function openPanel(title, html) {
+            document.getElementById('panel-title').innerText = title;
+            document.getElementById('panel-content').innerHTML = html;
+            infoPanel.classList.remove('translate-y-full');
+            infoPanel.classList.remove('md:translate-x-[120%]');
+            
+            // Auto close sidebar on mobile when panel opens
+            closeSidebarMobile();
+        }
+
+        // 3. ICONS
+        function createIcon(iconClass, color, bgColor) {
+            return L.divIcon({
+                className: 'custom-div-icon',
+                html: `<div class="icon-marker-bg" style="background-color: ${bgColor};"><i class="${iconClass}" style="color: ${color}; font-size: 18px;"></i></div>`,
+                iconSize: [36, 36], iconAnchor: [18, 36], popupAnchor: [0, -38]
+            });
+        }
+
+        const icons = {
+            braskem: createIcon('fas fa-industry', '#1e3a8a', '#ffffff'), 
+            hotel: createIcon('fas fa-bed', '#d97706', '#ffffff'), 
+            airport: createIcon('fas fa-plane-departure', '#0ea5e9', '#ffffff'), 
+            police: createIcon('fas fa-shield-alt', '#ffffff', '#1e40af'), 
+            military: createIcon('fas fa-person-military-rifle', '#ffffff', '#064e3b'), 
+            hospital: createIcon('fas fa-heart-pulse', '#ffffff', '#dc2626'), 
+            clinic: createIcon('fas fa-user-md', '#ffffff', '#ef4444'),
+            food: createIcon('fas fa-utensils', '#ffffff', '#10b981'),
+            fire: createIcon('fas fa-fire-extinguisher', '#ffffff', '#b91c1c')
+        };
+
+        // 4. DATA SETS
+        const assets = [
+            { id: "braskem", name: "BRASKEM IDESA PLANT", coords: BRASKEM_COORDS, icon: icons.braskem, desc: "PRIMARY TARGET. Petrochemical Complex.", type: "Target" },
+            { id: "airport", name: "Minatitlán Int. Airport (MTT)", coords: AIRPORT_COORDS, icon: icons.airport, desc: "Arrival & Extraction Point.", type: "Transport" },
+            { id: "holidayinn", name: "Hotel Holiday Inn", coords: [18.150364, -94.494602], icon: icons.hotel, desc: "VIP Lodging (West Zone).", type: "Lodging" },
+            { id: "terranova", name: "Hotel Terranova", coords: [18.112213, -94.442369], icon: icons.hotel, desc: "VIP Lodging (City Center).", type: "Lodging" }
+        ];
+
+        const security = [
+            { name: "Marine Battalion (SEMAR)", coords: [18.151067, -94.412827], icon: icons.military, desc: "Main Naval Base.", type: "Military" },
+            { name: "National Guard HQ", coords: [18.138509, -94.495002], icon: icons.police, desc: "Federal Support Base.", type: "Police" },
+            { name: "Naval Zone Command", coords: [18.149900, -94.411879], icon: icons.military, desc: "Command Center.", type: "Military" },
+            { name: "GN Checkpoint (Coatza)", coords: [18.126448, -94.434910], icon: icons.police, desc: "Entry Control.", type: "Police" },
+            { name: "State Police (Palmasola)", coords: [18.135191, -94.435998], icon: icons.police, desc: "Local State Force.", type: "Police" },
+            { name: "Checkpoint (Calzadas)", coords: [18.118308, -94.441737], icon: icons.police, desc: "Traffic Filter.", type: "Police" },
+            { name: "Checkpoint (Tunnel)", coords: [18.127041, -94.430021], icon: icons.police, desc: "Industrial Access.", type: "Police" },
+            { name: "Federal Road Module", coords: [18.018442, -94.569483], icon: icons.police, desc: "Highway Patrol.", type: "Police" },
+            { name: "Fire Department", coords: [18.140734, -94.427654], icon: icons.fire, desc: "Emergency Response.", type: "Emergency" },
+            { name: "Guardia Nacional 546", coords: [18.0416, -94.2427], icon: icons.police, desc: "Nanchital Detachment.", type: "Police" },
+            { name: "Policia Estatal Nanchital", coords: [18.0667, -94.4167], icon: icons.police, desc: "Nanchital State Force.", type: "Police" }
+        ];
+
+        const health = [
+            { name: "NAVAL HOSPITAL", coords: [18.140437, -94.523042], icon: icons.hospital, desc: "LEVEL 3 TRAUMA.", type: "Medical" },
+            { name: "Regional Hospital", coords: [18.146416, -94.448802], icon: icons.hospital, desc: "Public High Capacity.", type: "Medical" },
+            { name: "SEMEDIS Clinic", coords: [18.149799, -94.419961], icon: icons.hospital, desc: "Private Care Level 2.", type: "Medical" },
+            { name: "Medica Sur", coords: [18.148633, -94.459857], icon: icons.hospital, desc: "Specialties.", type: "Medical" },
+            { name: "IMSS Gen. Hospital", coords: [18.139662, -94.433414], icon: icons.hospital, desc: "Trauma Center.", type: "Medical" },
+            { name: "May Clinic", coords: [18.144871, -94.427864], icon: icons.hospital, desc: "Private Clinic.", type: "Medical" },
+            { name: "Red Cross", coords: [18.139176, -94.463695], icon: icons.clinic, desc: "Emergency First Response.", type: "Medical" }
+        ];
+        
+        const restaurants = [
+            { id: "italiannis", name: "Italianni's", coords: [18.1420, -94.4820], icon: icons.food, desc: "Plaza Forum. Secure parking.", type: "Dining" },
+            { id: "trocadero", name: "El Trocadero", coords: [18.1520, -94.4350], icon: icons.food, desc: "Steakhouse. Near Boardwalk.", type: "Dining" },
+            { id: "rancho", name: "Rancho Viejo", coords: [18.1350, -94.4550], icon: icons.food, desc: "Traditional. Downtown.", type: "Dining" },
+            { id: "madison", name: "Madison Grill", coords: [18.142009, -94.481590], icon: icons.food, desc: "Premium Grill. Plaza Teatro.", type: "Dining" },
+            { id: "pampas", name: "Mr. Pampas", coords: [18.1455, -94.4725], icon: icons.food, desc: "Brazilian Steakhouse.", type: "Dining" }
+        ];
+
+        // 5. ROUTE DATA
+        const tacticalAnalysis = {
+            r_malecon: {
+                title: "Route A: via Malecón (Coastal)",
+                image: "http://imgfz.com/i/q8TF9Hk.png",
+                risk: "MEDIUM",
+                riskColor: "text-blue-500",
+                summary: "Scenic route along the coast. High exposure but good infrastructure. Recommended for low-profile movements during daylight.",
+                advantages: ["Good road condition (Paved)", "High visibility (Urban area)", "Proximity to hotels & restaurants"],
+                risks: ["Traffic lights cause frequent stops", "Exposed to public view", "Potential congestion at peak hours (18:00-20:00)"]
+            },
+            r_lasmatas: {
+                title: "Route B: via Las Matas (Free)",
+                image: "http://imgfz.com/i/h4vXrla.png",
+                risk: "HIGH (ENVIRONMENTAL)",
+                riskColor: "text-orange-500",
+                summary: "Shortest path but traversing swampy terrain. History of sinking asphalt and dense fog in mornings. Use with caution.",
+                advantages: ["Fastest extraction to Airport", "No toll booths", "Direct connection"],
+                risks: ["Severe potholes & sinking road sections", "Fog reduces visibility to <10m", "Isolated area (low signal spots)"]
+            },
+            r_coatza2: {
+                title: "Route C: via Coatza II (Highway)",
+                image: "http://imgfz.com/i/tBdcnMm.png",
+                risk: "LOW (RECOMMENDED)",
+                riskColor: "text-purple-500",
+                summary: "Primary VIP route. Uses federal toll infrastructure. Controlled access and better monitoring capabilities.",
+                advantages: ["Separated lanes (High safety)", "Monitored by National Guard", "Stable cellular coverage"],
+                risks: ["Longer distance (+15 km)", "Toll booth congestion", "Bridge maintenance delays"]
+            }
+        };
+
+        // =========================================
+        // 6. RENDER & INTERACTION LOGIC
+        // =========================================
+        const layers = {
+            routes: L.layerGroup().addTo(map),
+            pois: L.layerGroup().addTo(map)
+        };
+
+        // NEW: Universal Logic Calculator for ANY marker
+        function openItemPanel(item) {
+            // Calculate Distances
+            const distAp = (map.distance(item.coords, AIRPORT_COORDS) / 1000).toFixed(1) + " km";
+            const distPlant = (map.distance(item.coords, BRASKEM_COORDS) / 1000).toFixed(1) + " km";
+            
+            // Determine Styling based on type
+            let colorClass = "text-slate-600";
+            let bgClass = "bg-slate-100";
+            let borderClass = "border-slate-500";
+            
+            if(item.type === 'Medical' || item.type === 'Emergency') { colorClass = "text-red-600"; bgClass = "bg-red-100"; borderClass="border-red-500"; }
+            else if(item.type === 'Military' || item.type === 'Police') { colorClass = "text-blue-700"; bgClass = "bg-blue-100"; borderClass="border-blue-500"; }
+            else if(item.type === 'Dining') { colorClass = "text-emerald-600"; bgClass = "bg-emerald-100"; borderClass="border-emerald-500"; }
+            else if(item.type === 'Lodging') { colorClass = "text-amber-600"; bgClass = "bg-amber-100"; borderClass="border-amber-500"; }
+
+            const html = `
+                <div class="border-l-4 ${borderClass} pl-4 mb-4">
+                    <h3 class="font-bold text-lg text-gray-900">${item.name}</h3>
+                    <span class="text-xs font-bold ${colorClass} ${bgClass} px-2 py-1 rounded">${item.type}</span>
+                </div>
+                <div class="grid grid-cols-2 gap-3 mb-4">
+                    <div class="bg-white p-3 rounded border border-slate-200 shadow-sm">
+                        <p class="text-[10px] text-slate-400 uppercase font-bold"><i class="fas fa-plane mr-1"></i> From Airport</p>
+                        <p class="text-sm font-bold text-slate-700">${distAp}</p>
+                    </div>
+                    <div class="bg-white p-3 rounded border border-slate-200 shadow-sm">
+                        <p class="text-[10px] text-slate-400 uppercase font-bold"><i class="fas fa-industry mr-1"></i> To Braskem</p>
+                        <p class="text-sm font-bold text-slate-700">${distPlant}</p>
+                    </div>
+                </div>
+                <div class="bg-slate-100 p-4 rounded-lg">
+                    <h4 class="font-bold text-slate-800 text-xs uppercase mb-2"><i class="fas fa-clipboard-check mr-2"></i> Intelligence Notes</h4>
+                    <p class="text-xs text-slate-600">${item.desc}</p>
+                </div>
+                
+                <a href="https://www.google.com/maps/dir/?api=1&destination=${item.coords[0]},${item.coords[1]}" target="_blank" class="nav-btn">
+                    <i class="fas fa-location-arrow mr-1"></i> NAVIGATE HERE
+                </a>
+            `;
+            
+            openPanel(item.name, html);
+            
+            // Draw temporary line
+            layers.routes.clearLayers();
+            // Optional: Draw line to airport/plant for visual context
+        }
+
+        function renderMarkers(data) {
+            data.forEach(item => {
+                const m = L.marker(item.coords, { icon: item.icon }).addTo(layers.pois);
+                
+                // NEW: Click event replaces Popup
+                m.on('click', () => {
+                    openItemPanel(item);
+                });
+            });
+        }
+
+        // Generic Path Drawer
+        function drawGenericPath(points, color) {
+            return L.polyline(points, {
+                color: color, weight: 4, opacity: 0.8, dashArray: '8, 12', lineCap: 'round'
+            }).addTo(layers.routes);
+        }
+
+        // Initial Render
+        renderMarkers(assets); renderMarkers(security); renderMarkers(health); renderMarkers(restaurants);
+
+        // Toggles
+        const toggle = (id, data) => document.getElementById(id).addEventListener('change', e => {
+            layers.pois.clearLayers();
+            if(document.getElementById('layer-assets').checked) renderMarkers(assets);
+            if(document.getElementById('layer-security').checked) renderMarkers(security);
+            if(document.getElementById('layer-health').checked) renderMarkers(health);
+            if(document.getElementById('layer-food').checked) renderMarkers(restaurants);
+            closeSidebarMobile(); // Auto close if they toggle layers on mobile
+        });
+        toggle('layer-assets', assets); toggle('layer-security', security); toggle('layer-health', health); toggle('layer-food', restaurants);
+
+        // 1. MAIN ROUTE CONTROLLER
+        document.getElementById('main-route-selector').addEventListener('change', (e) => {
+            const val = e.target.value;
+            layers.routes.clearLayers();
+            document.getElementById('restaurant-selector').value = "";
+            document.getElementById('hotel-selector').value = "";
+            
+            let color, data;
+
+            if (val === 'r_malecon') { color = '#3b82f6'; data = tacticalAnalysis.r_malecon; }
+            else if (val === 'r_lasmatas') { color = '#f97316'; data = tacticalAnalysis.r_lasmatas; }
+            else if (val === 'r_coatza2') { color = '#a855f7'; data = tacticalAnalysis.r_coatza2; }
+            
+            if(val) {
+                const poly = drawGenericPath([AIRPORT_COORDS, BRASKEM_COORDS], color);
+                map.fitBounds(poly.getBounds(), { padding: [80, 80] });
+                showAnalysis(data);
+                closeSidebarMobile(); // UX Fix
+            }
+        });
+
+        // 2. HOTEL & RESTAURANT CONTROLLERS (Updated to use new logic)
+        document.getElementById('hotel-selector').addEventListener('change', (e) => handleSelectorChange(e.target.value, assets));
+        document.getElementById('restaurant-selector').addEventListener('change', (e) => handleSelectorChange(e.target.value, restaurants));
+
+        function handleSelectorChange(val, list) {
+            if(!val) return;
+            const item = list.find(i => i.id === val);
+            if(item) {
+                // Center map
+                map.flyTo(item.coords, 14, { duration: 1.5 });
+                // Show panel
+                openItemPanel(item);
+            }
+        }
+
+        // DISPLAY FUNCTIONS
+        function showAnalysis(data) {
+            const html = `
+                <div class="route-image-container" onclick="window.open('${data.image}', '_blank')">
+                    <img src="${data.image}" class="route-image" alt="Route Map">
+                    <div class="absolute bottom-2 right-2 bg-black/50 text-white text-[9px] px-2 py-1 rounded">Click to Enlarge</div>
+                </div>
+                <div class="border-l-4 ${data.riskColor.replace('text', 'border')} pl-4 mb-4">
+                    <h3 class="font-bold text-lg text-gray-900">${data.title}</h3>
+                    <span class="text-xs font-bold ${data.riskColor} bg-slate-100 px-2 py-1 rounded uppercase">Risk Level: ${data.risk}</span>
+                </div>
+                <p class="mb-4 text-xs italic text-slate-500">${data.summary}</p>
+                <div class="space-y-4">
+                    <div class="bg-emerald-50 p-3 rounded border border-emerald-100">
+                        <h4 class="font-bold text-emerald-800 text-[10px] uppercase mb-2">Advantages</h4>
+                        <ul class="list-disc list-inside text-[11px] text-emerald-900 space-y-1">${data.advantages.map(a => `<li>${a}</li>`).join('')}</ul>
+                    </div>
+                    <div class="bg-rose-50 p-3 rounded border border-rose-100">
+                        <h4 class="font-bold text-rose-800 text-[10px] uppercase mb-2">Tactical Risks</h4>
+                        <ul class="list-disc list-inside text-[11px] text-rose-900 space-y-1">${data.risks.map(r => `<li>${r}</li>`).join('')}</ul>
+                    </div>
+                </div>`;
+            openPanel(data.title, html);
+        }
+    </script>
+</body>
+</html>
